@@ -1,3 +1,30 @@
+import os
+import subprocess
+import streamlit as st
+
+@st.cache_resource
+def instalar_navegadores_playwright():
+    """
+    Aciona o sistema operacional (Linux do Streamlit Cloud) para baixar 
+    os motores do navegador em segundo plano de forma silenciosa.
+    O uso do cache garante que este processo massivo ocorra apenas uma vez 
+    durante o ciclo de vida do contêiner.
+    """
+    # Define um comando otimizado para baixar APENAS o Chromium, 
+    # economizando espaço e tempo de inicialização.
+    comando = ["playwright", "install", "chromium"]
+    
+    try:
+        # Executa o comando nativo aguardando sua finalização
+        subprocess.run(comando, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return True
+    except subprocess.CalledProcessError as erro:
+        st.error(f"Erro Crítico de Infraestrutura: Falha na injeção do Playwright. Detalhes: {erro.stderr.decode()}")
+        return False
+
+# Inicializa o injetor antes do render do dashboard
+instalar_navegadores_playwright()
+
 import sys
 import os
 
