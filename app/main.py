@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import streamlit as st
+import shutil
 
 @st.cache_resource
 def instalar_navegadores_playwright():
@@ -11,25 +12,31 @@ def instalar_navegadores_playwright():
     O uso do cache garante que este processo massivo ocorra apenas uma vez 
     durante o ciclo de vida do contêiner.
     """
-    comando = [sys.executable, "-m", "playwright", "install", "chromium"]
-    
+    # Define um comando otimizado para baixar APENAS o Chromium, 
+    # economizando espaço e tempo de inicialização.
+    comando = ["playwright", "install", "chromium"]
+
+    # Verifica se o binário/CLI do playwright está disponível no PATH
+    if shutil.which("playwright") is None:
+        st.warning("Playwright CLI não encontrado: instalação dos navegadores foi ignorada.")
+        return False
+
     try:
         subprocess.run(comando, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return True
     except subprocess.CalledProcessError as erro:
-        st.error(f"Erro Crítico de Infraestrutura: Falha na injeção do Playwright. Detalhes: {erro.stderr.decode()}")
+        stderr = erro.stderr.decode() if erro.stderr else str(erro)
+        st.error(f"Erro Crítico de Infraestrutura: Falha na injeção do Playwright. Detalhes: {stderr}")
         return False
     except FileNotFoundError:
-        try:
-            comando_alt = ["playwright", "install", "chromium"]
-            subprocess.run(comando_alt, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            return True
-        except Exception as e:
-            st.error(f"Erro ao tentar instalar o Playwright: {e}")
-            return False
+        st.warning("Comando 'playwright' não foi encontrado no sistema; pulei a instalação.")
+        return False
 
 # Inicializa o injetor antes do render do dashboard
-instalar_navegadores_playwright()
+try:
+    instalar_navegadores_playwright()
+except Exception as e:
+    st.warning(f"Falha ao tentar instalar navegadores do Playwright: {e}")
 
 import os
 
@@ -59,7 +66,8 @@ import plotly.express as px
 from pathlib import Path
 from datetime import datetime
 from config import settings
-from collectors import scraper
+# Import de `scraper` feito tardiamente onde necessário para evitar
+# ModuleNotFoundError se `playwright` não estiver instalado no ambiente.
 from app.utils import statistics
 from app import scheduler
 
@@ -635,8 +643,22 @@ elif aba_selecionada == "⚙️ Administração" and is_admin_authenticated:
         if st.button("🔄 Sincronizar Tudo (Membros + Ranking + Palpites)", use_container_width=True):
             with st.spinner("Conectando ao DaCopa via Playwright..."):
                 st.info("Iniciando sincronização completa de membros, classificação e palpites detalhados...")
-                success = scraper.run_coleta_completa()
-                
+                try:
+                    from collectors import scraper
+                except Exception as e:
+                    st.error(
+                        "Não foi possível carregar o módulo de coleta (Playwright ausente).\n"
+                        "Instale as dependências: `pip install -r requirements.txt` e execute `playwright install chromium`.\n"
+                        f"Erro: {e}"
+                    )
+                    success = False
+
+                try:
+                    success = scraper.run_coleta_completa()
+                except Exception as e:
+                    st.error(f"Erro durante a coleta: {e}")
+                    success = False
+
                 if success:
                     st.success("Dados reais sincronizados e gravados no Excel com sucesso! 🎉")
                     st.cache_data.clear()
