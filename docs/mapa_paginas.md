@@ -1,4 +1,4 @@
-# Mapa de Páginas — Bolão é Nóis na Copa
+# Mapa de Páginas — Bolão Copa
 
 Este documento mapeia as páginas da plataforma externa DaCopa (que serão alvos de navegação e coleta pelo robô automatizado) e as páginas/telas internas do Dashboard que serão apresentadas aos usuários do bolão.
 
@@ -53,7 +53,7 @@ O robô de automação (Playwright) irá interagir com o site do DaCopa seguindo
 
 ## 2. Mapa de Páginas/Abas do Dashboard (Streamlit)
 
-A aplicação "Bolão é Nóis na Copa" apresentará as informações consolidadas por meio de abas ou navegação lateral (Sidebar) dividida em 5 principais visões:
+A aplicação "Bolão Copa" apresentará as informações consolidadas por meio de abas ou navegação lateral (Sidebar) dividida em 5 principais visões:
 
 ### Aba 1: 🏆 Visão Geral (Resumo Geral)
 *   **Objetivo:** Exibir dados consolidados em formato de cartões (*cards*).

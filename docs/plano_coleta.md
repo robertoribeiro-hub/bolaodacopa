@@ -1,4 +1,4 @@
-# Plano de Coleta de Dados — Bolão é Nóis na Copa
+# Plano de Coleta de Dados — Bolão Copa
 
 Este documento descreve a estratégia lógica de automação, scraping e persistência de dados obtidos a partir do site DaCopa.
 

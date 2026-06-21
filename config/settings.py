@@ -57,3 +57,18 @@ def get_selectors() -> dict:
     return {}
 
 SELECTORS = get_selectors()
+
+
+def missing_dacopa_env_vars() -> list[str]:
+    """Retorna as variáveis obrigatórias do DaCopa que ainda não foram configuradas."""
+    required = {
+        "DACOPA_GROUP_ID": DACOPA_GROUP_ID,
+        "DACOPA_EMAIL": DACOPA_EMAIL,
+        "DACOPA_PASSWORD": DACOPA_PASSWORD,
+    }
+    return [name for name, value in required.items() if not str(value).strip()]
+
+
+def has_dacopa_config() -> bool:
+    """Indica se a configuração mínima para sincronizar com o DaCopa está pronta."""
+    return not missing_dacopa_env_vars()

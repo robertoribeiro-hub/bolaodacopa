@@ -567,8 +567,12 @@ def run_coleta_completa() -> bool:
     logger.info("Iniciando Sincronização Completa via API DaCopa")
     logger.info("─" * 60)
 
-    if not settings.DACOPA_GROUP_ID:
-        logger.error("DACOPA_GROUP_ID não configurado no .env.")
+    missing_env = settings.missing_dacopa_env_vars()
+    if missing_env:
+        logger.error(
+            "Configuração DaCopa incompleta no .env. Variáveis faltando: %s",
+            ", ".join(missing_env),
+        )
         return False
 
     try:

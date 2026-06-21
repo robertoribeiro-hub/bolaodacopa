@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+.pycache/
 *.py[cod]
 *$py.class
 
@@ -51,4 +52,4 @@ print_eval.py
 # Ignore auth state inside storage just to be safe, though storage is ignored
 auth_state.json
 
-
+.env

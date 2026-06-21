@@ -5,7 +5,7 @@ import shutil
 
 import streamlit as st
 
-st.set_page_config(page_title="🏆 Bolão é Nóis na Copa", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="🏆 Bolão Copa", page_icon="⚽", layout="wide")
 
 MISSING_DEPENDENCIES = []
 try:
@@ -294,13 +294,14 @@ st.markdown("""
 <div class="header-container">
     <div class="header-title-box">
         <h1 class="header-title">🏆 COPA DO MUNDO 2026</h1>
-        <div class="header-subtitle">Bolão é Nóis na Copa — Central de Inteligência</div>
+        <div class="header-subtitle">Bolão Copa — Central de Inteligência</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 # Carrega os dados
 df_membros, df_historico, df_palpites = load_data()
+missing_dacopa_env = settings.missing_dacopa_env_vars()
 
 # Configuração da barra lateral (Sidebar)
 st.sidebar.markdown("<h3 style='margin:0; padding:10px 0;'>⚽ Navegação</h3>", unsafe_allow_html=True)
@@ -318,7 +319,10 @@ if is_admin_authenticated:
 aba_selecionada = st.sidebar.radio("Selecione a Tela", navigation_options, label_visibility="collapsed")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown(f"**Conexão DaCopa:** `Online ✅` ")
+conexao_status = "Configuração pendente ⚠️" if missing_dacopa_env else "Online ✅"
+st.sidebar.markdown(f"**Conexão DaCopa:** `{conexao_status}` ")
+if missing_dacopa_env:
+    st.sidebar.warning("Faltando no .env: " + ", ".join(missing_dacopa_env))
 if df_historico.empty:
     st.sidebar.warning("Banco de dados local vazio. Faça uma coleta no Painel Admin.")
 
@@ -643,8 +647,19 @@ elif aba_selecionada == "⚙️ Administração" and is_admin_authenticated:
     
     with col_btn:
         st.markdown("<h4 style='margin-top:0;'>Coletas Manuais</h4>", unsafe_allow_html=True)
+
+        if missing_dacopa_env:
+            st.error(
+                "Configuração DaCopa incompleta. Preencha no `.env`: "
+                + ", ".join(missing_dacopa_env)
+                + ". Depois reinicie o Streamlit."
+            )
         
-        if st.button("🔄 Sincronizar Tudo (Membros + Ranking + Palpites)", use_container_width=True):
+        if st.button(
+            "🔄 Sincronizar Tudo (Membros + Ranking + Palpites)",
+            use_container_width=True,
+            disabled=bool(missing_dacopa_env),
+        ):
             with st.spinner("Conectando ao DaCopa via Playwright..."):
                 st.info("Iniciando sincronização completa de membros, classificação e palpites detalhados...")
                 try:

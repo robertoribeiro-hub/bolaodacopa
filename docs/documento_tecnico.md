@@ -1,6 +1,6 @@
-# Documento Técnico — Bolão é Nóis na Copa (Copa do Mundo 2026)
+# Documento Técnico — Bolão Copa (Copa do Mundo 2026)
 
-Este documento especifica a arquitetura técnica, as escolhas de tecnologias e o fluxo de dados para a aplicação "Bolão é Nóis na Copa".
+Este documento especifica a arquitetura técnica, as escolhas de tecnologias e o fluxo de dados para a aplicação "Bolão Copa".
 
 ---
 
