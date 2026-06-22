@@ -1,7 +1,15 @@
 import os
 import json
 from pathlib import Path
-from dotenv import load_dotenv
+
+# Importa `load_dotenv` de forma resiliente: em ambientes onde
+# `python-dotenv` não está instalado, não interrompemos a inicialização
+try:
+    from dotenv import load_dotenv
+except Exception:
+    def load_dotenv(*args, **kwargs):
+        # fallback vazio quando python-dotenv não estiver disponível
+        return False
 
 # Caminho raiz do projeto
 BASE_DIR = Path(__file__).resolve().parent.parent
