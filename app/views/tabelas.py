@@ -50,8 +50,58 @@ def render(df_historico: pd.DataFrame) -> None:
         )
         st.dataframe(df_ranking, use_container_width=True, hide_index=True, height=520)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        render_ranking_table("Primeira Rodada", "2026-06-11", "2026-06-17")
-    with col2:
-        render_ranking_table("Segunda Rodada", "2026-06-18", "2026-06-23")
+    rodadas = [
+        {
+            "titulo": "Primeira Rodada",
+            "data_inicio": "2026-06-11",
+            "data_fim": "2026-06-17",
+        },
+        {
+            "titulo": "Segunda Rodada",
+            "data_inicio": "2026-06-18",
+            "data_fim": "2026-06-23",
+        },
+        {
+            "titulo": "Terceira Rodada",
+            "data_inicio": "2026-06-24",
+            "data_fim": "2026-06-27",
+        },
+        {
+            "titulo": "Playoffs",
+            "data_inicio": "2026-06-28",
+            "data_fim": "2026-07-19",
+        },
+    ]
+
+    hoje = pd.Timestamp.now().normalize()
+
+    def format_rodada_label(rodada: dict) -> str:
+        inicio = pd.to_datetime(rodada["data_inicio"])
+        fim = pd.to_datetime(rodada["data_fim"])
+        label = f"{rodada['titulo']} ({inicio.strftime('%d/%m')} a {fim.strftime('%d/%m')})"
+        if hoje < inicio:
+            label += " - indisponível"
+        return label
+
+    labels = [format_rodada_label(rodada) for rodada in rodadas]
+    default_index = 0
+    for index, rodada in enumerate(rodadas):
+        if hoje >= pd.to_datetime(rodada["data_inicio"]):
+            default_index = index
+
+    selecionado = st.selectbox("Selecione a rodada", labels, index=default_index)
+    rodada_escolhida = rodadas[labels.index(selecionado)]
+    rodada_inicio = pd.to_datetime(rodada_escolhida["data_inicio"])
+
+    if hoje < rodada_inicio:
+        st.warning(
+            f"A opção '{rodada_escolhida['titulo']}' estará disponível a partir de "
+            f"{rodada_inicio.strftime('%d/%m/%Y')}."
+        )
+        return
+
+    render_ranking_table(
+        rodada_escolhida["titulo"],
+        rodada_escolhida["data_inicio"],
+        rodada_escolhida["data_fim"],
+    )
