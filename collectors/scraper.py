@@ -14,6 +14,7 @@ do Playwright, que já realizou o login em app.dacopa.com.
 """
 
 import json
+import threading
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,7 @@ from config import settings
 from collectors import session_manager
 
 logger = session_manager.logger
+_PALPITES_FILE_LOCK = threading.Lock()
 
 # URL base da API (diferente da URL do app)
 DACOPA_API_BASE = "https://api.dacopa.com"
@@ -678,28 +680,71 @@ def save_palpites_snapshot(palpites: list[dict], coleta_id: str) -> bool:
         return False
 
     try:
-        df_atual = pd.read_excel(settings.PALPITES_EXCEL)
+        with _PALPITES_FILE_LOCK:
+            df_atual = pd.read_excel(settings.PALPITES_EXCEL)
 
-        # Remove registros da mesma coleta (permite re-sincronização idempotente)
-        if not df_atual.empty and "coleta_id" in df_atual.columns:
-            df_atual = df_atual[df_atual["coleta_id"].astype(str) != str(coleta_id)]
+            # Remove registros da mesma coleta (permite re-sincronização idempotente)
+            if not df_atual.empty and "coleta_id" in df_atual.columns:
+                df_atual = df_atual[df_atual["coleta_id"].astype(str) != str(coleta_id)]
 
-        df_novos = pd.DataFrame(palpites)
-        df_final = pd.concat([df_atual, df_novos], ignore_index=True)
-        
-        # Deduplica mantendo partidas repetidas entre os mesmos times quando o placar real muda.
-        df_final = df_final.drop_duplicates(
-            subset=["participante", "mandante", "visitante", "placar_real_m", "placar_real_v"],
-            keep="last",
-        )
-        
-        df_final.to_excel(settings.PALPITES_EXCEL, index=False)
+            df_novos = pd.DataFrame(palpites)
+            df_final = pd.concat([df_atual, df_novos], ignore_index=True)
+
+            # Deduplica mantendo partidas repetidas entre os mesmos times quando o placar real muda.
+            df_final = df_final.drop_duplicates(
+                subset=["participante", "mandante", "visitante", "placar_real_m", "placar_real_v"],
+                keep="last",
+            )
+
+            df_final.to_excel(settings.PALPITES_EXCEL, index=False)
         logger.info(f"Palpites salvos em palpites.xlsx. Total: {len(df_novos)} registros (coleta {coleta_id}).")
         return True
 
     except Exception as e:
         logger.error(f"Erro ao salvar palpites.xlsx: {e}")
         return False
+
+
+def collect_palpites_for_ranking(page: Page, ranking: list[dict], coleta_id: Optional[str] = None) -> bool:
+    """
+    Coleta os palpites individuais para os participantes do ranking informado.
+
+    Essa função reaproveita uma página Playwright já autenticada, permitindo
+    que o listener ao vivo atualize apenas `palpites.xlsx` sem refazer a
+    sincronização completa de membros, ranking e histórico.
+    """
+    if not ranking:
+        logger.warning("Ranking vazio; não há participantes para sincronizar palpites.")
+        return False
+
+    coleta_id = coleta_id or datetime.now().strftime("%Y%m%d%H%M%S")
+    logger.info("─" * 40)
+    logger.info(f"Coletando palpites individuais por membro (coleta {coleta_id})...")
+
+    todos_palpites = []
+    for item in ranking:
+        raw_arroba = item.get("arroba") or item.get("handle") or ""
+        if pd.isna(raw_arroba):
+            raw_arroba = ""
+
+        raw_arroba = str(raw_arroba).strip()
+        handle = raw_arroba.lstrip("@")
+        if not handle:
+            logger.warning(f"Participante sem arroba/handle ignorado na coleta de palpites: {item}")
+            continue
+
+        arroba = raw_arroba if raw_arroba.startswith("@") else f"@{handle}"
+        nome = item.get("nome") or item.get("participante") or handle
+        palpites_membro = fetch_palpites_membro(page, handle, nome, arroba, coleta_id)
+        todos_palpites.extend(palpites_membro)
+
+    return save_palpites_snapshot(todos_palpites, coleta_id)
+
+
+def sync_palpites_from_api_data(page: Page, api_data: dict, coleta_id: Optional[str] = None) -> bool:
+    """Sincroniza `palpites.xlsx` usando o ranking presente no payload da API."""
+    _, ranking = parse_standings(api_data)
+    return collect_palpites_for_ranking(page, ranking, coleta_id)
 
 
 def save_live_matches(live_matches: list[dict]) -> bool:
@@ -866,17 +911,7 @@ def run_coleta_completa() -> bool:
             save_ranking_snapshot(ranking)
 
             # 6. Coleta palpites individuais de cada membro
-            logger.info("─" * 40)
-            logger.info("Coletando palpites individuais por membro...")
-            todos_palpites = []
-            for item in ranking:
-                handle = item["arroba"].lstrip("@")
-                palpites_membro = fetch_palpites_membro(
-                    page, handle, item["nome"], item["arroba"], coleta_id
-                )
-                todos_palpites.extend(palpites_membro)
-
-            save_palpites_snapshot(todos_palpites, coleta_id)
+            collect_palpites_for_ranking(page, ranking, coleta_id)
 
             # 6. Reconstrução do histórico retroativo dia-a-dia
             logger.info("Reconstruindo histórico retroativo dia a dia...")
