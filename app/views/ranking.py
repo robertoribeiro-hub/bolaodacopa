@@ -1,5 +1,6 @@
 import unicodedata
 import json
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
@@ -194,7 +195,7 @@ def build_live_points(df_palpites: pd.DataFrame, live_matches: list[dict]) -> pd
     return pd.DataFrame(results)
 
 
-def render(df_historico: pd.DataFrame, df_palpites: pd.DataFrame = None, live_matches: list[dict] | None = None) -> None:
+def render(df_historico: pd.DataFrame, df_palpites: pd.DataFrame = None, live_matches: Optional[list[dict]] = None) -> None:
     st.markdown("<div class='section-title'>Classificação Geral da Copa</div>", unsafe_allow_html=True)
 
     if df_historico.empty:

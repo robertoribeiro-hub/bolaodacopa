@@ -17,6 +17,8 @@ import json
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
+import unicodedata
+from typing import Optional
 from playwright.sync_api import sync_playwright, Page
 from config import settings
 from collectors import session_manager
@@ -25,6 +27,61 @@ logger = session_manager.logger
 
 # URL base da API (diferente da URL do app)
 DACOPA_API_BASE = "https://api.dacopa.com"
+LOCAL_TIMEZONE = "America/Sao_Paulo"
+
+# Fallback para reconstruir o histórico quando a API do dashboard não retorna
+# partidas finalizadas. As datas abaixo seguem as janelas das rodadas usadas
+# no dashboard: primeira rodada (11/06-17/06) e segunda rodada (18/06-23/06).
+FALLBACK_MATCH_DATES = [
+    ("2026-06-11", "México", "África do Sul", 2, 0),
+    ("2026-06-11", "Coreia do Sul", "República Tcheca", 2, 1),
+    ("2026-06-12", "Canadá", "Bósnia", 1, 1),
+    ("2026-06-12", "Estados Unidos", "Paraguai", 4, 1),
+    ("2026-06-13", "Catar", "Suíça", 1, 1),
+    ("2026-06-13", "Brasil", "Marrocos", 1, 1),
+    ("2026-06-13", "Haiti", "Escócia", 0, 1),
+    ("2026-06-14", "Austrália", "Turquia", 2, 0),
+    ("2026-06-14", "Alemanha", "Curaçao", 7, 1),
+    ("2026-06-14", "Holanda", "Japão", 2, 2),
+    ("2026-06-14", "Costa do Marfim", "Equador", 1, 0),
+    ("2026-06-14", "Suécia", "Tunísia", 5, 1),
+    ("2026-06-15", "Espanha", "Cabo Verde", 0, 0),
+    ("2026-06-15", "Bélgica", "Egito", 1, 1),
+    ("2026-06-15", "Arábia Saudita", "Uruguai", 1, 1),
+    ("2026-06-15", "Irã", "Nova Zelândia", 2, 2),
+    ("2026-06-16", "França", "Senegal", 3, 1),
+    ("2026-06-16", "Iraque", "Noruega", 1, 4),
+    ("2026-06-16", "Argentina", "Argélia", 3, 0),
+    ("2026-06-17", "Áustria", "Jordânia", 3, 1),
+    ("2026-06-17", "Portugal", "RD Congo", 1, 1),
+    ("2026-06-17", "Inglaterra", "Croácia", 4, 2),
+    ("2026-06-17", "Gana", "Panamá", 1, 0),
+    ("2026-06-17", "Uzbequistão", "Colômbia", 1, 3),
+    ("2026-06-18", "República Tcheca", "África do Sul", 1, 1),
+    ("2026-06-18", "Suíça", "Bósnia", 4, 1),
+    ("2026-06-18", "Canadá", "Catar", 6, 0),
+    ("2026-06-18", "México", "Coreia do Sul", 1, 0),
+    ("2026-06-19", "Estados Unidos", "Austrália", 2, 0),
+    ("2026-06-19", "Escócia", "Marrocos", 0, 1),
+    ("2026-06-19", "Brasil", "Haiti", 3, 0),
+    ("2026-06-20", "Turquia", "Paraguai", 0, 1),
+    ("2026-06-20", "Holanda", "Suécia", 5, 1),
+    ("2026-06-20", "Alemanha", "Costa do Marfim", 2, 1),
+    ("2026-06-20", "Equador", "Curaçao", 0, 0),
+    ("2026-06-21", "Tunísia", "Japão", 0, 4),
+    ("2026-06-21", "Espanha", "Arábia Saudita", 4, 0),
+    ("2026-06-21", "Bélgica", "Irã", 0, 0),
+    ("2026-06-21", "Uruguai", "Cabo Verde", 2, 2),
+    ("2026-06-21", "Nova Zelândia", "Egito", 1, 3),
+    ("2026-06-22", "Argentina", "Áustria", 2, 0),
+    ("2026-06-22", "França", "Iraque", 3, 0),
+    ("2026-06-22", "Noruega", "Senegal", 3, 2),
+    ("2026-06-23", "Jordânia", "Argélia", 1, 2),
+    ("2026-06-23", "Portugal", "Uzbequistão", None, None),
+    ("2026-06-23", "Inglaterra", "Gana", None, None),
+    ("2026-06-23", "Panamá", "Croácia", None, None),
+    ("2026-06-23", "Colômbia", "RD Congo", None, None),
+]
 
 
 # ──────────────────────────────────────────────────────────────
@@ -165,7 +222,7 @@ def save_ranking_snapshot(ranking: list[dict]) -> bool:
 # Acesso à API REST do DaCopa via contexto autenticado
 # ──────────────────────────────────────────────────────────────
 
-def _extract_api_authorization_token(page: Page) -> str | None:
+def _extract_api_authorization_token(page: Page) -> Optional[str]:
     """Captura o header Authorization usado pelo app para chamadas à API."""
     auth_token = None
 
@@ -351,6 +408,136 @@ def parse_standings(api_data: dict) -> tuple[list[dict], list[dict]]:
     return membros, ranking
 
 
+def normalize_team_key(value: str) -> str:
+    """Normaliza nomes de times para cruzar HTML/API/fallback sem depender de acentos."""
+    if pd.isna(value):
+        return ""
+
+    normalized = unicodedata.normalize("NFKD", str(value).strip().lower())
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
+def _safe_int(value) -> Optional[int]:
+    if pd.isna(value):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _local_date_from_api(value) -> Optional[str]:
+    if not value:
+        return None
+
+    parsed = pd.to_datetime(value, errors="coerce", utc=True)
+    if pd.isna(parsed):
+        return None
+
+    return parsed.tz_convert(LOCAL_TIMEZONE).strftime("%Y-%m-%d")
+
+
+def _extract_match_team(match: dict, side: str) -> str:
+    nested = match.get(f"{side}Team")
+    if isinstance(nested, dict):
+        name = nested.get("name")
+        if name:
+            return name
+
+    return (
+        match.get(f"{side}TeamName")
+        or match.get(f"{side}_team_name")
+        or match.get(side)
+        or ""
+    )
+
+
+def _extract_match_score(match: dict, side: str) -> Optional[int]:
+    possible_keys = [
+        f"{side}Score",
+        f"{side}TeamScore",
+        f"{side}_score",
+        f"{side}Goals",
+    ]
+    for key in possible_keys:
+        if key in match:
+            return _safe_int(match.get(key))
+
+    score = match.get("score")
+    if isinstance(score, dict):
+        for key in possible_keys:
+            if key in score:
+                return _safe_int(score.get(key))
+
+    return None
+
+
+def _match_pair_key(home: str, away: str) -> tuple[str, str]:
+    return normalize_team_key(home), normalize_team_key(away)
+
+
+def _match_score_key(home: str, away: str, home_score, away_score) -> Optional[tuple[str, str, int, int]]:
+    home_score = _safe_int(home_score)
+    away_score = _safe_int(away_score)
+    if home_score is None or away_score is None:
+        return None
+
+    home_key, away_key = _match_pair_key(home, away)
+    return home_key, away_key, home_score, away_score
+
+
+def build_match_date_lookup(api_data: dict) -> tuple[dict, dict]:
+    """
+    Monta lookup de datas por partida.
+
+    Prioriza dados da API quando disponíveis e completa com o calendário conhecido
+    das duas primeiras rodadas para permitir reconstrução após limpar storage/.
+    """
+    scored_lookup = {}
+    pair_dates = {}
+
+    def add_match(date_str: Optional[str], home: str, away: str, home_score=None, away_score=None):
+        if not date_str or not home or not away:
+            return
+
+        pair_key = _match_pair_key(home, away)
+        pair_dates.setdefault(pair_key, set()).add(date_str)
+
+        score_key = _match_score_key(home, away, home_score, away_score)
+        if score_key is not None:
+            scored_lookup[score_key] = date_str
+
+    for date_str, home, away, home_score, away_score in FALLBACK_MATCH_DATES:
+        add_match(date_str, home, away, home_score, away_score)
+
+    for collection_name in ("finishedMatches", "liveMatches", "upcomingMatches"):
+        for match in api_data.get(collection_name, []) or []:
+            date_str = _local_date_from_api(match.get("scheduledAt") or match.get("date"))
+            home = _extract_match_team(match, "home")
+            away = _extract_match_team(match, "away")
+            home_score = _extract_match_score(match, "home")
+            away_score = _extract_match_score(match, "away")
+            add_match(date_str, home, away, home_score, away_score)
+
+    unique_pair_lookup = {
+        pair_key: next(iter(dates))
+        for pair_key, dates in pair_dates.items()
+        if len(dates) == 1
+    }
+    return scored_lookup, unique_pair_lookup
+
+
+def resolve_match_date(row: pd.Series, scored_lookup: dict, pair_lookup: dict) -> Optional[str]:
+    home = row.get("mandante", "")
+    away = row.get("visitante", "")
+    score_key = _match_score_key(home, away, row.get("placar_real_m"), row.get("placar_real_v"))
+
+    if score_key is not None and score_key in scored_lookup:
+        return scored_lookup[score_key]
+
+    return pair_lookup.get(_match_pair_key(home, away))
+
+
 
 def init_palpites_excel():
 
@@ -500,8 +687,11 @@ def save_palpites_snapshot(palpites: list[dict], coleta_id: str) -> bool:
         df_novos = pd.DataFrame(palpites)
         df_final = pd.concat([df_atual, df_novos], ignore_index=True)
         
-        # Deduplica os palpites baseado no participante e na partida, mantendo sempre o mais recente
-        df_final = df_final.drop_duplicates(subset=["participante", "mandante", "visitante"], keep="last")
+        # Deduplica mantendo partidas repetidas entre os mesmos times quando o placar real muda.
+        df_final = df_final.drop_duplicates(
+            subset=["participante", "mandante", "visitante", "placar_real_m", "placar_real_v"],
+            keep="last",
+        )
         
         df_final.to_excel(settings.PALPITES_EXCEL, index=False)
         logger.info(f"Palpites salvos em palpites.xlsx. Total: {len(df_novos)} registros (coleta {coleta_id}).")
@@ -541,31 +731,20 @@ def rebuild_historical_snapshots(api_data: dict, palpites_file: Path):
         if df_palpites.empty:
             return
 
-        finished = api_data.get("finishedMatches", [])
-        if not finished:
+        scored_lookup, pair_lookup = build_match_date_lookup(api_data)
+        if not scored_lookup and not pair_lookup:
+            logger.warning("Nenhuma data de partida disponível para reconstruir o histórico.")
             return
 
-        # Pega as datas de cada partida
-        matches_dates = {}
-        for m in finished:
-            match_id = f"{m['homeTeamName'].lower()[:4]}x{m['awayTeamName'].lower()[:4]}"
-            # Pega o dia (ex: 2026-06-11)
-            date_str = m['scheduledAt'].split("T")[0]
-            matches_dates[match_id] = date_str
-
-        # Cria uma coluna "data_partida" no palpites (precisamos comparar substring porque palpites tem sufixo _coletaid)
-        def get_date(partida_id):
-            base_id = partida_id.split('_')[0]
-            for m_id, d in matches_dates.items():
-                if base_id == m_id:
-                    return d
-            return "2099-12-31"
-
-        df_palpites["data_partida"] = df_palpites["partida_id"].apply(get_date)
+        df_palpites["data_partida"] = df_palpites.apply(
+            lambda row: resolve_match_date(row, scored_lookup, pair_lookup),
+            axis=1,
+        )
         
-        # Filtra apenas palpites de partidas finalizadas (que ganharam data)
-        df_validos = df_palpites[df_palpites["data_partida"] != "2099-12-31"]
+        # Filtra apenas palpites de partidas que ganharam data.
+        df_validos = df_palpites[df_palpites["data_partida"].notna()].copy()
         if df_validos.empty:
+            logger.warning("Nenhum palpite conseguiu ser associado a uma data de partida.")
             return
 
         # Dias de jogos em ordem cronológica

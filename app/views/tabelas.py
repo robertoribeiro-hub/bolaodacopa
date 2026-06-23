@@ -23,8 +23,8 @@ def render(df_historico: pd.DataFrame) -> None:
             return
 
         idx_ultima = df_faixa.sort_values(["participante", "arroba", "data_hora"]).groupby(["participante", "arroba"])["data_hora"].idxmax()
-        df_ultima = df_faixa.loc[idx_ultima, ["participante", "arroba", "pontos"]].copy()
-        df_ultima = df_ultima.rename(columns={"pontos": "pontos_ultima"})
+        df_ultima = df_faixa.loc[idx_ultima, ["participante", "arroba", "posicao", "pontos"]].copy()
+        df_ultima = df_ultima.rename(columns={"posicao": "posicao_ultima", "pontos": "pontos_ultima"})
 
         df_antes = df_rounds[df_rounds["data_hora"] < inicio].copy()
         if not df_antes.empty:
@@ -37,7 +37,10 @@ def render(df_historico: pd.DataFrame) -> None:
         df_ranking = df_ultima.merge(df_antes, on=["participante", "arroba"], how="left")
         df_ranking["pontos_antes"] = df_ranking["pontos_antes"].fillna(0)
         df_ranking["Pontuação"] = (df_ranking["pontos_ultima"] - df_ranking["pontos_antes"]).clip(lower=0)
-        df_ranking = df_ranking.sort_values(by=["Pontuação", "participante", "arroba"], ascending=[False, True, True]).reset_index(drop=True)
+        df_ranking = df_ranking.sort_values(
+            by=["Pontuação", "posicao_ultima", "participante", "arroba"],
+            ascending=[False, True, True, True],
+        ).reset_index(drop=True)
         df_ranking.insert(0, "Posição", range(1, len(df_ranking) + 1))
         df_ranking = df_ranking[["Posição", "participante", "arroba", "Pontuação"]].rename(columns={
             "participante": "Participante",
@@ -60,16 +63,6 @@ def render(df_historico: pd.DataFrame) -> None:
             "titulo": "Segunda Rodada",
             "data_inicio": "2026-06-18",
             "data_fim": "2026-06-23",
-        },
-        {
-            "titulo": "Terceira Rodada",
-            "data_inicio": "2026-06-24",
-            "data_fim": "2026-06-27",
-        },
-        {
-            "titulo": "Playoffs",
-            "data_inicio": "2026-06-28",
-            "data_fim": "2026-07-19",
         },
     ]
 
