@@ -5,7 +5,7 @@ import shutil
 
 import streamlit as st
 
-st.set_page_config(page_title="🏆 Bolão Copa", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="🏆 Bolão - Copa do Mundo", page_icon="⚽", layout="wide")
 
 MISSING_DEPENDENCIES = []
 try:
@@ -248,7 +248,7 @@ st.markdown("""
 <div class="header-container">
     <div class="header-title-box">
         <h1 class="header-title">🏆 COPA DO MUNDO 2026</h1>
-        <div class="header-subtitle">Bolão Copa — Central de Inteligência</div>
+        <div class="header-subtitle">A diversão do seu bolão é aqui</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
