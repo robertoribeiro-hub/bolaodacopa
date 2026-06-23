@@ -1,11 +1,16 @@
 import unicodedata
 import json
+from datetime import date
 from typing import Optional
 
 import pandas as pd
 import streamlit as st
 
 from config import settings
+
+
+LIVE_DOUBLE_POINTS_START_DATE = pd.Timestamp("2026-06-28").date()
+LIVE_MATCH_TIMEZONE = "America/Sao_Paulo"
 
 
 def normalize_team_name(value: str) -> str:
@@ -85,21 +90,37 @@ def calculate_live_points(pred_m: int, pred_v: int, actual_m: int, actual_v: int
     return 0
 
 
-def is_knockout_match(match: dict) -> bool:
-    if not isinstance(match, dict):
-        return False
+def get_match_date(value) -> Optional[date]:
+    if value is None:
+        return None
 
-    if match.get("isKnockout") or match.get("is_mata_mata") or match.get("doublePoints"):
-        return True
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if len(raw) == 10:
+            parsed_date = pd.to_datetime(raw, errors="coerce")
+            if not pd.isna(parsed_date):
+                return parsed_date.date()
+    elif pd.isna(value):
+        return None
 
-    stage = str(match.get("groupName") or match.get("phase") or match.get("round") or match.get("stage") or "").casefold()
-    return any(token in stage for token in (
-        "mata", "oitavas", "quartas", "semifinal", "final", "eliminat", "knockout", "playoff"
-    ))
+    parsed = pd.to_datetime(value, errors="coerce", utc=True)
+    if pd.isna(parsed):
+        return None
+
+    return parsed.tz_convert(LIVE_MATCH_TIMEZONE).date()
 
 
 def get_match_multiplier(match: dict) -> int:
-    return 2 if is_knockout_match(match) else 1
+    if not isinstance(match, dict):
+        return 1
+
+    match_date = get_match_date(match.get("scheduledAt") or match.get("date"))
+    if match_date is None:
+        return 1
+
+    return 2 if match_date >= LIVE_DOUBLE_POINTS_START_DATE else 1
 
 
 def render_live_matches(live_matches: list[dict]) -> None:
@@ -163,7 +184,7 @@ def build_live_points(df_palpites: pd.DataFrame, live_matches: list[dict]) -> pd
             live_map[(home, away)] = (
                 int(match.get("homeScore", 0)),
                 int(match.get("awayScore", 0)),
-                match,
+                get_match_multiplier(match),
             )
 
     pontos = {}
@@ -179,8 +200,7 @@ def build_live_points(df_palpites: pd.DataFrame, live_matches: list[dict]) -> pd
         if score_match is None:
             continue
 
-        actual_m, actual_v, match = score_match
-        multiplier = get_match_multiplier(match)
+        actual_m, actual_v, multiplier = score_match
         pts = calculate_live_points(row.get("palpite_m", 0), row.get("palpite_v", 0), actual_m, actual_v)
         pts = pts * multiplier
         key = (row.get("participante", ""), row.get("arroba", ""))

@@ -49,6 +49,57 @@ class TestRankingLivePoints(unittest.TestCase):
         self.assertEqual(df_live.loc[df_live["arroba"] == "@maiaa", "pontos_ao_vivo"].iloc[0], 15)
         self.assertEqual(df_live.loc[df_live["arroba"] == "@outro", "pontos_ao_vivo"].iloc[0], 0)
 
+    def test_build_live_points_does_not_double_exact_score_through_june_27(self):
+        df_palpites = pd.DataFrame([
+            {
+                "participante": "Daniel Silveira",
+                "arroba": "@copydani",
+                "mandante": "Portugal",
+                "visitante": "Uzbequistão",
+                "palpite_m": 4,
+                "palpite_v": 0,
+            },
+        ])
+
+        live_matches = [
+            {
+                "homeTeam": {"name": "Portugal"},
+                "awayTeam": {"name": "Uzbequistão"},
+                "homeScore": 4,
+                "awayScore": 0,
+                "scheduledAt": "2026-06-27T17:00:00.000Z",
+                "round": "Final",
+            }
+        ]
+
+        df_live = build_live_points(df_palpites, live_matches)
+        self.assertEqual(df_live["pontos_ao_vivo"].iloc[0], 25)
+
+    def test_build_live_points_doubles_exact_score_from_june_28(self):
+        df_palpites = pd.DataFrame([
+            {
+                "participante": "Daniel Silveira",
+                "arroba": "@copydani",
+                "mandante": "Portugal",
+                "visitante": "Uzbequistão",
+                "palpite_m": 4,
+                "palpite_v": 0,
+            },
+        ])
+
+        live_matches = [
+            {
+                "homeTeam": {"name": "Portugal"},
+                "awayTeam": {"name": "Uzbequistão"},
+                "homeScore": 4,
+                "awayScore": 0,
+                "scheduledAt": "2026-06-28T17:00:00.000Z",
+            }
+        ]
+
+        df_live = build_live_points(df_palpites, live_matches)
+        self.assertEqual(df_live["pontos_ao_vivo"].iloc[0], 50)
+
     def test_build_live_points_returns_empty_dataframe_with_columns_when_no_match(self):
         df_palpites = pd.DataFrame([
             {"participante": "Maia", "arroba": "@maiaa", "mandante": "Brasil", "visitante": "Argentina", "palpite_m": 1, "palpite_v": 1}

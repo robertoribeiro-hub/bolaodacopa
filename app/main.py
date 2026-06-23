@@ -247,8 +247,8 @@ st.markdown("""
 st.markdown("""
 <div class="header-container">
     <div class="header-title-box">
-        <h1 class="header-title">🏆 COPA DO MUNDO 2026</h1>
-        <div class="header-subtitle">A diversão do seu bolão é aqui</div>
+        <h1 class="header-title">🏆 COPA DO MUNDO 2026!</h1>
+        <div class="header-subtitle">Bolão Copa — Central de Inteligência</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
